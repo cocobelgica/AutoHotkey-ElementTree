@@ -79,14 +79,10 @@ class ElementTree extends ElementTree.__base__
 	}
 
 	__Call(m, p*) {
-		static bif
-		/*
-		Do not initialize 'bif' as class static initializer(s) will not be
-		able to access the variable's content when calling this function.
-		*/
-		if !bif ; Not #Warn friendly
-			bif := "i)^i)^(Insert|Remove|M(in|ax)Index|(S|G)etCapacity|"
-			     . "GetAddress|_NewEnum|HasKey|Clone)$"
+		bif := false ; Make #Warn happy
+		if m in % "Insert,Remove,MinIndex,MaxIndex,GetCapacity,SetCapacity,"
+		        . "GetAddress,_NewEnum,HasKey,Clone"
+			bif := true
 		
 		if (m = "findall")
 			return this.find(p[1], true)
@@ -94,12 +90,15 @@ class ElementTree extends ElementTree.__base__
 		else if ObjHasKey(ElementTree.__Get, m)
 			return this[m, p*]
 		
-		else if (!ObjHasKey(ElementTree, m) && !(m ~= bif)) {
-			for k, v in p
-				if ElementTree.is_tree(v) ; ElementTree instance
-				|| ElementTree.is_element(v) ; ElementTree.Element instance
-				|| ElementTree.is_items(v) ; ElementTree.Items instance
+		else if !ObjHasKey(ElementTree, m) && !bif {
+			for k, v in p {
+				if !IsObject(v) || (ComObjType(v) == 9)
+					continue
+				if (v.base == ElementTree.Element
+				|| v.base == ElementTree
+				|| v.base == ElementTree.Items)
 					p[k] := v.__dom__
+			}
 			try (res := (this.__dom__)[m](p*))
 			catch
 				return
@@ -201,15 +200,6 @@ class ElementTree extends ElementTree.__base__
 		            : false
 	}
 	/*
-	Alternative
-	This is slower due to the redirected calls
-	find(xpr, all:=false) {
-		if all
-			return this.selectNodes(xpr)
-		else return this.selectSingleNode(xpr)
-	}
-	*/
-	/*
 	Generates a string representation of an XML element and its descendant(s)
 	*/
 	tostring(i:="", lvl:=0) {
@@ -240,6 +230,13 @@ class ElementTree extends ElementTree.__base__
 		} else str := this.xml
 
 		return start . str . end
+	}
+
+	write(loc) {
+		/*
+		todo: Add way to save with indentation, might do 'tostring()'
+		*/
+		return this.__doc__.save(loc)
 	}
 
 	class Element
@@ -316,13 +313,6 @@ class ElementTree extends ElementTree.__base__
 				             . "nodeName,nodeTypedValue,nodeTypeString,nodeValue,"
 				             . "ownerDocument,parentNode,parsed,prefix,previousSibling,"
 				             . "specified,tagName,text,value,xml"
-				/*
-				else if (k ~= "i)^(attributes|baseName|childNodes|dataType|"
-				            . "definition|(first|last)Child|name(spaceURI)?|"
-				            . "(next|previous)Sibling|node(Name|Type(dValue|"
-				            . "String)?|Value)|ownerDocument|par(entNode|sed)|"
-				            . "prefix|specified|tagName|text|value|xml)$")
-				*/
 				{
 					try res := (this.__dom__)[k, p*]
 					catch
@@ -350,7 +340,7 @@ class ElementTree extends ElementTree.__base__
 			tag() {
 				if (this.typestr != "element")
 					throw Exception("Type mismatch. Not an 'element' node.", -1)
-				return this.nodeName
+				return this.__dom__.nodeName
 			}
 
 			text() {
@@ -379,19 +369,15 @@ class ElementTree extends ElementTree.__base__
 			             . "removeAttribute,removeAttributeNode,removeChild,replaceChild,"
 			             . "selectNodes,selectSingleNode,setAttribute,setAttributeNode,"
 			             . "transformNode,transformNodeToObject"
-			/*
-			else if (m ~= "i)^((append|remove|replace)Child|cloneNode|"
-			            . "get(Attribute(Node)?|ElementsByTagName)|"
-			            . "hasChildNodes|insertBefore|normalize|"
-			            . "removeAttribute(Node)?|select(Nodes|SingleNode)|"
-			            . "setAttribute(Node)?|transformNode(ToObject)?)$")
-			*/
 			{
-				for k, v in p
-					if ElementTree.is_tree(v)    ; ElementTree instance
-					|| ElementTree.is_element(v) ; ElementTree.Element instance
-					|| ElementTree.is_items(v)   ; ElementTree.Items instance
+				for k, v in p {
+					if !IsObject(v) || (ComObjType(v) == 9)
+						continue
+					if (v.base == ElementTree.Element
+					|| v.base == ElementTree
+					|| v.base == ElementTree.Items)
 						p[k] := v.__dom__
+				}
 				try (res := (this.__dom__)[m](p*))
 				catch
 					return
@@ -442,11 +428,6 @@ class ElementTree extends ElementTree.__base__
 			else if m in % "clone,getNamedItem,getProperty,getQualifiedItem,item,"
 			             . "matches,nextNode,peekNode,removeAll,removeNext,reset,"
 			             . "setNamedItem"
-			/*
-			else if (m ~= "i)^(((get|remove)(Named|Qualified))?Item|matches|"
-			            . "(next|peek)Node|re(set|move(All|Next))|setNamedItem|"
-			            . "clone|getProperty)$")
-			*/
 				try return (this.__dom__)[m](p*)
 		}
 
@@ -495,28 +476,18 @@ class ElementTree extends ElementTree.__base__
 		{
 
 			__(k, p*) {
-
+				; code here
 			}
 
 			version() {
 				static MSXML := ElementTree.version
 
-				if !MSXML
+				if !MSXML { ; Not #Warn friendly
 					MSXML := "MSXML2.DOMDocument"
-					      . ((A_OsVersion~="^WIN_(VISTA|7|8)$") ? ".6.0" : "")
+					if A_OsVersion in % "WIN_VISTA,WIN_7,WIN_8"
+						MSXML .= ".6.0"
+				}
 				return MSXML
-			}
-		}
-
-		__Call(m, p*) {
-			if m in % "is_tree,is_element,is_items"
-			{
-				if (ComObjType(p[1]) == 9)
-					return false
-				__base__ := {t:ElementTree
-				           , e:ElementTree.Element
-				           , i:ElementTree.Items}[SubStr(m, 4, 1)]
-				return (p[1].base == __base__)
 			}
 		}
 		/*
@@ -527,7 +498,7 @@ class ElementTree extends ElementTree.__base__
 			if !IsObject(obj) || (ComObjType(obj) != 9)
 				return obj
 			type := ComObjType(obj, "Name")
-			if (type ~= "^(IXML)?DOMDocument(2|3)?$") ;fix this
+			if type in % "DOMDocument,IXMLDOMDocument,IXMLDOMDocument2,IXMLDOMDocument3"
 				return new ElementTree(obj)
 			
 			else if (type == "IXMLDOMNode")
